@@ -93,9 +93,7 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
       renderContext,
       { (ctx) in
         let that = unsafeBitCast(ctx, to: TextureHW.self)
-        DispatchQueue.main.async {
-          that.updateCallback()
-        }
+        that.updateCallback()
       },
       UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
     )
@@ -122,9 +120,8 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
   }
 
   private func createPixelBuffer(_ size: CGSize) {
-    disposePixelBuffer()
-
-    textureContexts.reinit(
+    textureContexts.discardUnpublished()
+    textureContexts.replaceAvailable(
       objects: [
         TextureGLContext(
           context: context,
@@ -150,10 +147,10 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
     textureContexts.reinit(objects: [], skipCheckArgs: true)
   }
 
-  public func render(_ size: CGSize) {
+  public func render(_ size: CGSize) -> Bool {
     let textureContext = textureContexts.nextAvailable()
     if textureContext == nil {
-      return
+      return false
     }
 
     CGLSetCurrentContext(context)
@@ -184,6 +181,7 @@ public class TextureHW: NSObject, FlutterTexture, ResizableTextureProtocol {
     glFlush()
 
     textureContexts.pushAsReady(textureContext!)
+    return true
   }
 
   static private func getProcAddress(

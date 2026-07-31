@@ -60,9 +60,13 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
       renderContext,
       { (ctx) in
         let that = unsafeBitCast(ctx, to: TextureSW.self)
-        DispatchQueue.main.async {
+        #if os(macOS)
           that.updateCallback()
-        }
+        #else
+          DispatchQueue.main.async {
+            that.updateCallback()
+          }
+        #endif
       },
       UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque())
     )
@@ -83,26 +87,38 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
   }
 
   private func createPixelBuffer(_ size: CGSize) {
-    disposePixelBuffer()
+    #if os(macOS)
+      textureContexts.discardUnpublished()
+    #else
+      disposePixelBuffer()
+    #endif
 
-    textureContexts.reinit(
-      objects: [
-        TextureSWContext(size: size),
-        TextureSWContext(size: size),
-        TextureSWContext(size: size),
-      ],
-      skipCheckArgs: true
-    )
+    let contexts = [
+      TextureSWContext(size: size),
+      TextureSWContext(size: size),
+      TextureSWContext(size: size),
+    ]
+    #if os(macOS)
+      textureContexts.replaceAvailable(
+        objects: contexts,
+        skipCheckArgs: true
+      )
+    #else
+      textureContexts.reinit(
+        objects: contexts,
+        skipCheckArgs: true
+      )
+    #endif
   }
 
   private func disposePixelBuffer() {
     textureContexts.reinit(objects: [], skipCheckArgs: true)
   }
 
-  public func render(_ size: CGSize) {
+  public func render(_ size: CGSize) -> Bool {
     let textureContext = textureContexts.nextAvailable()
     if textureContext == nil {
-      return
+      return false
     }
 
     CVPixelBufferLockBaseAddress(
@@ -142,5 +158,6 @@ public class TextureSW: NSObject, FlutterTexture, ResizableTextureProtocol {
     mpv_render_context_render(renderContext, &params)
 
     textureContexts.pushAsReady(textureContext!)
+    return true
   }
 }

@@ -16,6 +16,7 @@ public class SwappableObjectManager<T> {
   private var available: [T]
   private var ready: [T] = []
   private var _current: T?
+  private var discardCurrentOnNextSwap = false
 
   init(objects: [T], skipCheckArgs: Bool = false) {
     if !skipCheckArgs {
@@ -38,6 +39,33 @@ public class SwappableObjectManager<T> {
     available = objects
     ready = []
     _current = nil
+    discardCurrentOnNextSwap = false
+  }
+
+  public func discardUnpublished() {
+    lock.lock()
+    defer {
+      lock.unlock()
+    }
+
+    available = []
+    ready = []
+  }
+
+  // Stages a new generation while the last published object remains readable.
+  public func replaceAvailable(objects: [T], skipCheckArgs: Bool = false) {
+    if !skipCheckArgs {
+      SwappableObjectManager.checkArgs(objects)
+    }
+
+    lock.lock()
+    defer {
+      lock.unlock()
+    }
+
+    available = objects
+    ready = []
+    discardCurrentOnNextSwap = _current != nil
   }
 
   public func nextAvailable() -> T? {
@@ -91,7 +119,8 @@ public class SwappableObjectManager<T> {
     let old: T? = _current
     _current = next
 
-    if old == nil {
+    if old == nil || discardCurrentOnNextSwap {
+      discardCurrentOnNextSwap = false
       return
     }
 
